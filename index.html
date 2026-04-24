@@ -29,6 +29,13 @@
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+        
+        /* Vertical Text Utility */
+        .vertical-text {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            transform: rotate(180deg);
+        }
     </style>
 </head>
 <body>
@@ -87,16 +94,15 @@
         const LOG_BD = { info:'border-sky-500', success:'border-emerald-500', error:'border-red-500', warn:'border-amber-500' };
         const LOG_TX = { info:'text-sky-300', success:'text-emerald-300', error:'text-red-300', warn:'text-amber-300' };
 
-        /* ── Vertical OSI Label ── */
+        /* ── Vertical OSI Label Component (Fixed & Anchored) ── */
         function OsiLabel() {
-            const letters = 'МОДЕЛЬ OSI'.split('');
             return (
-                <div className="hidden lg:flex flex-col items-center justify-between py-3 w-12 shrink-0 select-none">
-                    {letters.map((ch, i) => (
-                        <span key={i} className="text-2xl font-black text-white/15 leading-none">
-                            {ch === ' ' ? '\u00A0' : ch}
-                        </span>
-                    ))}
+                <div className="hidden lg:block w-14 shrink-0 sticky top-24 self-start">
+                    <div className="flex items-center justify-center h-[calc(100vh-8rem)] rounded-2xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/5 backdrop-blur-md">
+                        <div className="vertical-text text-2xl font-black tracking-[0.3em] text-white/15 select-none py-6 bg-clip-text">
+                            МОДЕЛЬ OSI
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -111,7 +117,6 @@
             const tRef = useRef([]);
             const logRef = useRef(null);
 
-            // Auto-scroll log to bottom on new entry
             useEffect(() => {
                 if (logRef.current) {
                     logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -280,7 +285,7 @@
                         <div className="max-w-[1360px] w-full px-4 py-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
 
                             {/* LEFT: OSI vertical label + layers */}
-                            <div className="flex gap-0">
+                            <div className="flex gap-0 items-start">
                                 <OsiLabel />
                                 <div className="flex-1 space-y-2 min-w-0">
                                     {ZONES.map(zone => {
@@ -421,6 +426,10 @@
     </script>
 </body>
 </html>
+
+
+
+
 
 
 
