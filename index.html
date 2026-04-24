@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Models Explorer</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0f172a; }
+        .glass {
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .log-fade { animation: fadeIn 0.25s ease; }
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+        }
+        .error-pulse { animation: pulse-red 0.8s ease infinite; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        /* ── Icons (inline SVG) ── */
+        const I = {
+            Server: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>,
+            Lock: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
+            GitBranch: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>,
+            Activity: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+            Router: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="14" width="20" height="6" rx="2"/><path d="M6 14V8a2 2 0 012-2h8a2 2 0 012 2v6"/><circle cx="12" cy="12" r="1"/></svg>,
+            Network: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-4a2 2 0 012-2h10a2 2 0 012 2v4"/></svg>,
+            Cable: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 7h18"/><path d="M7 7v10a2 2 0 002 2h10a2 2 0 002-2V7"/><path d="M7 17v2"/><path d="M17 17v2"/></svg>,
+            ArrowDown: <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>,
+            ArrowUp: <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>,
+            Alert: <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+            Refresh: <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>,
+            Package: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0022 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+            Clock: <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            Info: <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+            Layers: <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+        };
+
+        /* ── Layer data ── */
+        const LAYERS = [
+            { id:7, name:'Application', nameRu:'Прикладной', pdu:'Data', addr:'URL, URI', fn:'Сетевые сервисы', protocols:['HTTP','HTTPS','FTP','DNS','SMTP','SSH'], hw:['Server','Workstation'], desc:'Взаимодействие с пользовательскими приложениями.', tcpip:'Application', Icon:I.Server, grad:'from-violet-500 to-purple-600', blockCls:'from-violet-500 to-purple-600', ac:'violet' },
+            { id:6, name:'Presentation', nameRu:'Представления', pdu:'Data', addr:'Syntax', fn:'Шифрование, сжатие', protocols:['TLS','SSL','JPEG','MPEG','ASCII'], hw:['Gateway'], desc:'Трансляция, шифрование и сжатие данных.', tcpip:'Application', Icon:I.Lock, grad:'from-pink-500 to-rose-600', blockCls:'from-pink-500 to-rose-600', ac:'pink' },
+            { id:5, name:'Session', nameRu:'Сеансовый', pdu:'Data', addr:'Session ID', fn:'Управление сессиями', protocols:['NetBIOS','RPC','SIP'], hw:['App Server'], desc:'Установка и завершение сеансов связи.', tcpip:'Application', Icon:I.GitBranch, grad:'from-sky-500 to-blue-600', blockCls:'from-sky-500 to-blue-600', ac:'sky' },
+            { id:4, name:'Transport', nameRu:'Транспортный', pdu:'Segment', addr:'Port (16-bit)', fn:'Контроль ошибок, поток', protocols:['TCP','UDP','SCTP'], hw:['Firewall L4','Load Balancer'], desc:'Надёжная доставка, управление потоком, контроль ошибок.', tcpip:'Transport', Icon:I.Activity, grad:'from-emerald-500 to-green-600', blockCls:'from-emerald-500 to-green-600', ac:'emerald' },
+            { id:3, name:'Network', nameRu:'Сетевой', pdu:'Packet', addr:'IP Address', fn:'Маршрутизация', protocols:['IP','ICMP','IGMP','BGP','OSPF'], hw:['Router','L3 Switch'], desc:'Логическая адресация и маршрутизация между сетями.', tcpip:'Internet', Icon:I.Router, grad:'from-amber-500 to-yellow-600', blockCls:'from-amber-500 to-yellow-600', ac:'amber' },
+            { id:2, name:'Data Link', nameRu:'Канальный', pdu:'Frame', addr:'MAC Address', fn:'Контроль ошибок (CRC)', protocols:['Ethernet','ARP','VLAN','STP','PPP'], hw:['Switch','Bridge','NIC'], desc:'Физическая адресация, контроль ошибок на уровне кадров.', tcpip:'Network Access', Icon:I.Network, grad:'from-blue-500 to-indigo-600', blockCls:'from-blue-500 to-indigo-600', ac:'blue' },
+            { id:1, name:'Physical', nameRu:'Физический', pdu:'Bits', addr:'None', fn:'Передача битов', protocols:['1000BASE-T','Wi-Fi','USB','RS-232'], hw:['Cable','Hub','Repeater'], desc:'Физическая передача битов через среду.', tcpip:'Network Access', Icon:I.Cable, grad:'from-slate-500 to-gray-600', blockCls:'from-slate-500 to-gray-600', ac:'slate' },
+        ];
+
+        const ZONES = [
+            { name:'Application', layers:[7,6,5], tc:'text-violet-400', bg:'bg-violet-500/5', bd:'border-violet-500/20' },
+            { name:'Transport', layers:[4], tc:'text-emerald-400', bg:'bg-emerald-500/5', bd:'border-emerald-500/20' },
+            { name:'Internet', layers:[3], tc:'text-amber-400', bg:'bg-amber-500/5', bd:'border-amber-500/20' },
+            { name:'Network Access', layers:[2,1], tc:'text-blue-400', bg:'bg-blue-500/5', bd:'border-blue-500/20' },
+        ];
+
+        const AC = {
+            violet:{ bd:'border-violet-500/50', gl:'shadow-violet-500/30', bg:'bg-violet-500/10' },
+            pink:{ bd:'border-pink-500/50', gl:'shadow-pink-500/30', bg:'bg-pink-500/10' },
+            sky:{ bd:'border-sky-500/50', gl:'shadow-sky-500/30', bg:'bg-sky-500/10' },
+            emerald:{ bd:'border-emerald-500/50', gl:'shadow-emerald-500/30', bg:'bg-emerald-500/10' },
+            amber:{ bd:'border-amber-500/50', gl:'shadow-amber-500/30', bg:'bg-amber-500/10' },
+            blue:{ bd:'border-blue-500/50', gl:'shadow-blue-500/30', bg:'bg-blue-500/10' },
+            slate:{ bd:'border-slate-500/50', gl:'shadow-slate-500/30', bg:'bg-slate-500/10' },
+        };
+
+        const LOG_BD = { info:'border-sky-500', success:'border-emerald-500', error:'border-red-500', warn:'border-amber-500' };
+        const LOG_TX = { info:'text-sky-300', success:'text-emerald-300', error:'text-red-300', warn:'text-amber-300' };
+
+        /* ── Vertical OSI Label ── */
+        function OsiLabel() {
+            const letters = 'МОДЕЛЬ OSI'.split('');
+            return (
+                <div className="hidden lg:flex flex-col items-center justify-between py-3 w-12 shrink-0 select-none">
+                    {letters.map((ch, i) => (
+                        <span key={i} className="text-2xl font-black text-white/15 leading-none">
+                            {ch === ' ' ? '\u00A0' : ch}
+                        </span>
+                    ))}
+                </div>
+            );
+        }
+
+        /* ── App ── */
+        function App() {
+            const [status, setStatus] = useState('idle');
+            const [activeLayer, setActiveLayer] = useState(null);
+            const [packetBlocks, setPacketBlocks] = useState([]);
+            const [logs, setLogs] = useState([]);
+            const [selectedLayer, setSelectedLayer] = useState(null);
+            const tRef = useRef([]);
+            const logRef = useRef(null);
+
+            // Auto-scroll log to bottom on new entry
+            useEffect(() => {
+                if (logRef.current) {
+                    logRef.current.scrollTop = logRef.current.scrollHeight;
+                }
+            }, [logs]);
+
+            const addLog = useCallback((msg, type = 'info') => {
+                setLogs(prev => [...prev, { id: Date.now() + Math.random(), time: new Date().toLocaleTimeString('ru-RU'), msg, type }].slice(-60));
+            }, []);
+
+            const clearT = useCallback(() => {
+                tRef.current.forEach(t => clearTimeout(t));
+                tRef.current = [];
+            }, []);
+
+            const delay = useCallback((fn, ms) => {
+                tRef.current.push(setTimeout(fn, ms));
+            }, []);
+
+            const resetAll = useCallback(() => {
+                clearT();
+                setStatus('idle');
+                setActiveLayer(null);
+                setPacketBlocks([]);
+                setSelectedLayer(null);
+                setLogs([]);
+                addLog('Система сброшена', 'info');
+            }, [clearT, addLog]);
+
+            const startEncapsulation = useCallback(() => {
+                if (status !== 'idle') return;
+                clearT();
+                setStatus('encapsulating');
+                setPacketBlocks([]);
+                setSelectedLayer(null);
+                addLog('Начало инкапсуляции', 'info');
+
+                const steps = [
+                    { l:7, lbl:'HTTP', c:'from-violet-500 to-purple-600', m:'L7: Данные приложения (HTTP)' },
+                    { l:6, lbl:'TLS', c:'from-pink-500 to-rose-600', m:'L6: Шифрование TLS/SSL' },
+                    { l:5, lbl:'Session', c:'from-sky-500 to-blue-600', m:'L5: Сеанс установлен' },
+                    { l:4, lbl:'TCP:443', c:'from-emerald-500 to-green-600', m:'L4: TCP заголовок (порт 443)' },
+                    { l:3, lbl:'IP', c:'from-amber-500 to-yellow-600', m:'L3: IP заголовок (192.168→10.0.0)' },
+                    { l:2, lbl:'Ether+FCS', c:'from-blue-500 to-indigo-600', m:'L2: Кадр Ethernet (MAC)' },
+                    { l:1, lbl:'01101001', c:'from-slate-500 to-gray-600', m:'L1: Биты в среду передачи' },
+                ];
+                let blocks = [];
+                steps.forEach((s, i) => {
+                    delay(() => {
+                        setActiveLayer(s.l); setSelectedLayer(s.l);
+                        addLog(s.m, 'info');
+                        blocks.unshift({ lbl:s.lbl, c:s.c, l:s.l, err:false });
+                        setPacketBlocks([...blocks]);
+                    }, (i + 1) * 450);
+                });
+                delay(() => { setActiveLayer(null); setStatus('idle'); addLog('Инкапсуляция завершена', 'success'); }, (steps.length + 1) * 450);
+            }, [status, clearT, addLog, delay]);
+
+            const startDecapsulation = useCallback(() => {
+                if (status !== 'idle') return;
+                clearT();
+                setStatus('decapsulating');
+                setSelectedLayer(null);
+                addLog('Начало декапсуляции', 'info');
+
+                let blocks = [
+                    { lbl:'01101001', c:'from-slate-500 to-gray-600', l:1, err:false },
+                    { lbl:'Ether+FCS', c:'from-blue-500 to-indigo-600', l:2, err:false },
+                    { lbl:'IP', c:'from-amber-500 to-yellow-600', l:3, err:false },
+                    { lbl:'TCP:443', c:'from-emerald-500 to-green-600', l:4, err:false },
+                    { lbl:'Session', c:'from-sky-500 to-blue-600', l:5, err:false },
+                    { lbl:'TLS', c:'from-pink-500 to-rose-600', l:6, err:false },
+                    { lbl:'HTTP', c:'from-violet-500 to-purple-600', l:7, err:false },
+                ];
+                setPacketBlocks([...blocks]);
+
+                const steps = [
+                    { l:2, rm:'Ether+FCS', m:'L2: Кадр Ethernet разобран' },
+                    { l:3, rm:'IP', m:'L3: IP пакет обработан' },
+                    { l:4, rm:'TCP:443', m:'L4: TCP сегмент разобран' },
+                    { l:5, rm:'Session', m:'L5: Сеанс определён' },
+                    { l:6, rm:'TLS', m:'L6: Данные расшифрованы' },
+                    { l:7, rm:null, m:'L7: Данные доставлены приложению' },
+                ];
+                steps.forEach((s, i) => {
+                    delay(() => {
+                        setActiveLayer(s.l); setSelectedLayer(s.l);
+                        addLog(s.m, 'info');
+                        if (s.rm) blocks = blocks.filter(b => b.lbl !== s.rm);
+                        setPacketBlocks([...blocks]);
+                    }, (i + 1) * 500);
+                });
+                delay(() => { setActiveLayer(null); setStatus('idle'); addLog('Декапсуляция завершена', 'success'); }, (steps.length + 1) * 500);
+            }, [status, clearT, addLog, delay]);
+
+            const simulateError = useCallback(() => {
+                if (status !== 'idle') return;
+                clearT();
+                setStatus('error');
+                setSelectedLayer(null);
+                addLog('⚠️ ОБНАРУЖЕНА ОШИБКА', 'error');
+
+                const blocks = [
+                    { lbl:'01101001', c:'from-slate-500 to-gray-600', l:1, err:true },
+                    { lbl:'Ether+FCS', c:'from-blue-500 to-indigo-600', l:2, err:true },
+                    { lbl:'IP', c:'from-amber-500 to-yellow-600', l:3, err:true },
+                    { lbl:'TCP:443', c:'from-emerald-500 to-green-600', l:4, err:true },
+                    { lbl:'Session', c:'from-sky-500 to-blue-600', l:5, err:true },
+                    { lbl:'TLS', c:'from-pink-500 to-rose-600', l:6, err:true },
+                    { lbl:'HTTP', c:'from-violet-500 to-purple-600', l:7, err:true },
+                ];
+                setPacketBlocks(blocks);
+
+                [
+                    { d:600, l:2, m:'L2: CRC ошибка — кадр повреждён', t:'error' },
+                    { d:1200, l:2, m:'L2: Кадр отброшен', t:'error' },
+                    { d:1800, l:4, m:'L4: TCP таймаут — сегмент потерян', t:'warn' },
+                    { d:2400, l:4, m:'L4: TCP Retransmission', t:'warn' },
+                    { d:3000, l:4, m:'L4: Retransmission #1 отправлена', t:'info' },
+                    { d:3600, l:4, m:'L4: ACK получен', t:'success' },
+                ].forEach(s => {
+                    delay(() => { setActiveLayer(s.l); setSelectedLayer(s.l); addLog(s.m, s.t); }, s.d);
+                });
+                delay(() => {
+                    setActiveLayer(null); setStatus('idle');
+                    setPacketBlocks(blocks.map(b => ({...b, err:false})));
+                    addLog('Восстановление завершено', 'success');
+                }, 4200);
+            }, [status, clearT, addLog, delay]);
+
+            useEffect(() => () => clearT(), [clearT]);
+
+            const sel = selectedLayer ? LAYERS.find(l => l.id === selectedLayer) : null;
+            const a = sel ? AC[sel.ac] : null;
+            const sc = status === 'idle' ? 'text-emerald-400' : status === 'error' ? 'text-red-400' : 'text-sky-400';
+            const sl = { idle:'Готов', encapsulating:'Инкапсуляция...', decapsulating:'Декапсуляция...', error:'Ошибка передачи!' };
+            const dis = status !== 'idle';
+
+            return (
+                <div className="min-h-screen text-gray-100 font-sans selection:bg-sky-500/30 flex flex-col">
+                    {/* ── HEADER ── */}
+                    <header className="sticky top-0 z-50 glass border-b border-white/5">
+                        <div className="max-w-[1360px] mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">⚡</span>
+                                <div>
+                                    <h1 className="text-lg font-bold bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-transparent leading-tight">Network Models Explorer</h1>
+                                    <p className="text-xs text-gray-500">OSI &amp; TCP/IP — интерактивное изучение</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap justify-center">
+                                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs ${sc}`}>
+                                    <span className={`w-2 h-2 rounded-full ${status === 'idle' ? 'bg-emerald-400' : status === 'error' ? 'bg-red-400' : 'bg-sky-400'} animate-pulse`}/>
+                                    {sl[status]}
+                                </div>
+                                <button onClick={startEncapsulation} disabled={dis} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-500 to-blue-600 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all">{I.ArrowDown} Инкапсуляция</button>
+                                <button onClick={startDecapsulation} disabled={dis} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-green-600 text-white text-xs font-semibold shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all">{I.ArrowUp} Декапсуляция</button>
+                                <button onClick={simulateError} disabled={dis} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 text-white text-xs font-semibold shadow-lg shadow-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all">{I.Alert} Ошибка</button>
+                                <button onClick={resetAll} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-xs font-semibold hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all">{I.Refresh} Сброс</button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* ── MAIN ── */}
+                    <main className="flex-1 flex items-start justify-center">
+                        <div className="max-w-[1360px] w-full px-4 py-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                            {/* LEFT: OSI vertical label + layers */}
+                            <div className="flex gap-0">
+                                <OsiLabel />
+                                <div className="flex-1 space-y-2 min-w-0">
+                                    {ZONES.map(zone => {
+                                        const zl = LAYERS.filter(l => zone.layers.includes(l.id));
+                                        const ia = zl.some(l => l.id === activeLayer || l.id === selectedLayer);
+                                        return (
+                                            <div key={zone.name} className={`rounded-xl border ${zone.bd} ${zone.bg} glass transition-all ${ia ? 'ring-1 ring-white/10' : ''}`}>
+                                                <div className={`px-3 py-1.5 border-b ${zone.bd} flex items-center gap-2`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full bg-current ${zone.tc}`}/>
+                                                    <span className={`text-xs font-bold uppercase tracking-wider ${zone.tc}`}>TCP/IP — {zone.name}</span>
+                                                </div>
+                                                <div className="p-1.5 space-y-1">
+                                                    {zl.map(layer => {
+                                                        const ia2 = activeLayer === layer.id;
+                                                        const is2 = selectedLayer === layer.id;
+                                                        const c = AC[layer.ac];
+                                                        return (
+                                                            <button key={layer.id} onClick={() => setSelectedLayer(layer.id)}
+                                                                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all text-left ${
+                                                                    ia2 ? `${c.bd} ${c.bg} shadow-lg ${c.gl}` :
+                                                                    is2 ? 'border-white/15 bg-white/5' :
+                                                                    'border-white/5 bg-transparent hover:bg-white/5 hover:border-white/10'
+                                                                }`}>
+                                                                <div className={`flex items-center justify-center w-7 h-7 rounded-md text-xs font-bold shrink-0 ${ia2 ? `bg-gradient-to-br ${layer.grad} text-white` : 'bg-white/5 text-gray-500'}`}>L{layer.id}</div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-1.5">{layer.Icon}<span className="text-sm font-semibold truncate">{layer.name}</span></div>
+                                                                    <div className="text-xs text-gray-500 truncate">{layer.fn}</div>
+                                                                </div>
+                                                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                                                    <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-gray-400 font-mono">{layer.pdu}</span>
+                                                                    <div className="flex gap-0.5 flex-wrap justify-end">
+                                                                        {layer.protocols.slice(0,3).map(p => <span key={p} className="text-xs px-1 py-px rounded bg-white/5 text-gray-500 font-mono leading-none">{p}</span>)}
+                                                                        {layer.protocols.length > 3 && <span className="text-xs text-gray-600">+{layer.protocols.length - 3}</span>}
+                                                                    </div>
+                                                                    <div className="flex gap-0.5 flex-wrap justify-end">
+                                                                        {layer.hw.slice(0,2).map(h => <span key={h} className="text-xs px-1 py-px rounded bg-violet-500/10 text-violet-400 leading-none">⚙ {h}</span>)}
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* RIGHT: Detail + Log + Packet */}
+                            <div className="space-y-4">
+                                {/* Detail */}
+                                <div className="glass rounded-xl overflow-hidden">
+                                    <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">{I.Info}<span className="text-sm font-bold text-sky-400">ДЕТАЛЬНАЯ ИНФОРМАЦИЯ</span></div>
+                                    <div className="p-3">
+                                        {sel && a ? (
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${sel.grad} flex items-center justify-center shadow-lg ${a.gl}`}>{sel.Icon}</div>
+                                                    <div>
+                                                        <div className="text-base font-bold">L{sel.id} — {sel.name}</div>
+                                                        <div className="text-xs text-gray-500">{sel.nameRu}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {[{l:'PDU',v:sel.pdu},{l:'Адресация',v:sel.addr},{l:'Функция',v:sel.fn},{l:'TCP/IP',v:sel.tcpip}].map(x => (
+                                                        <div key={x.l} className="rounded-lg bg-white/5 border border-white/5 p-2"><div className="text-xs text-gray-500">{x.l}</div><div className="text-sm font-medium">{x.v}</div></div>
+                                                    ))}
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-gray-500 mb-1">Протоколы</div>
+                                                    <div className="flex flex-wrap gap-1">{sel.protocols.map(p => <span key={p} className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-xs font-mono text-gray-300">{p}</span>)}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-gray-500 mb-1">Оборудование</div>
+                                                    <div className="flex flex-wrap gap-1">{sel.hw.map(h => <span key={h} className="px-2 py-0.5 rounded bg-violet-500/10 border border-violet-500/20 text-xs text-violet-300">⚙ {h}</span>)}</div>
+                                                </div>
+                                                <div className="rounded-lg bg-sky-500/5 border border-sky-500/10 p-2 text-xs text-gray-300 leading-relaxed">📖 {sel.desc}</div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">{I.Layers}<span className="mt-2">Выберите уровень для просмотра</span></div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Event Log — FIXED HEIGHT */}
+                                <div className="glass rounded-xl overflow-hidden">
+                                    <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
+                                        {I.Clock}
+                                        <span className="text-sm font-bold text-amber-400">ЖУРНАЛ СОБЫТИЙ</span>
+                                        <span className="ml-auto text-xs text-gray-500">{logs.length} записей</span>
+                                    </div>
+                                    <div
+                                        ref={logRef}
+                                        className="overflow-y-auto p-2"
+                                        style={{ height: '320px' }}
+                                    >
+                                        {logs.length === 0 ? (
+                                            <div className="text-center text-gray-500 text-sm py-4">Нет событий</div>
+                                        ) : logs.map(log => (
+                                            <div key={log.id} className={`log-fade px-2 py-1.5 rounded border-l-2 ${LOG_BD[log.type]} bg-white/[0.02] font-mono text-xs mb-1`}>
+                                                <span className="text-gray-500 mr-1.5">[{log.time}]</span>
+                                                <span className={LOG_TX[log.type]}>{log.msg}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Packet structure */}
+                                <div className="glass rounded-xl overflow-hidden">
+                                    <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
+                                        {I.Package}
+                                        <span className="text-sm font-bold text-gray-400">СТРУКТУРА ПАКЕТА</span>
+                                        <span className="ml-auto text-xs text-gray-500 font-mono">{packetBlocks.length} блоков</span>
+                                    </div>
+                                    <div className="p-3 overflow-x-auto">
+                                        {packetBlocks.length === 0 ? (
+                                            <div className="text-center text-gray-600 text-xs py-2">Запустите анимацию</div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 min-w-max">
+                                                {packetBlocks.map((b, i) => (
+                                                    <React.Fragment key={i}>
+                                                        {i > 0 && <span className="text-gray-600 text-xs px-0.5">→</span>}
+                                                        <span className={`px-2.5 py-1.5 rounded-lg bg-gradient-to-r ${b.c} text-white text-xs font-mono font-bold shadow transition-all ${b.err ? 'error-pulse' : ''}`}>{b.lbl}</span>
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
